@@ -4,6 +4,9 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"os"
+
+	"github.com/wcharczuk/go-chart"
 	"time"
 )
 
@@ -16,7 +19,9 @@ type Agent struct {
 	distributions []GaussianDistribution // holds GaussianDistribution objects
 	q             []float64              // holds the Q variables for their respective GaussianDistributions
 	numExplored   []float64              // times the distributions has been expored/exploited, is float64 for ease of use
-	totalScore		float64								// required for calculating average reward
+	nextStep      int
+	totalScore    float64 // required for calculating average reward
+	exploration   float64
 }
 
 // Returns GaussianDistribution object
@@ -53,74 +58,108 @@ func ArraySumFloat64(a []float64) (sum float64) {
 // Returns the max index of an array
 // In the case of identical max's it randomly selects one
 func RandomArgmax(a []float64) int {
-
 	max := math.Inf(-1)
-
-	var maxList []int
+	var maxi int
 	for i, num := range a {
 		if num > max {
 			max = num
-			maxList = make([]int, i)
-		} else if num == max {
-			maxList = append(maxList, i)
+			maxi = i
 		}
 	}
-
-	if len(maxList) > 0 {
-		return maxList[rand.Intn(len(maxList))]
-	} else {
-		return 0
-	}
+	return maxi
 }
 
 // Returns agent object with distributions instantiated
 func CreateAgent(k int) Agent {
 	var agent Agent
 	for i := 0; i < k; i++ {
-		agent.distributions = append(agent.distributions, CreateGaussianDistribution(RandomFloat64Range(0, 5), RandomFloat64Range(0, 5)))
-		agent.q = append(agent.q, 0)
-		agent.numExplored = append(agent.numExplored, 0)
+		agent.distributions = append(agent.distributions, CreateGaussianDistribution(RandomFloat64Range(-5, 5), RandomFloat64Range(-3, 3)))
 	}
+	agent.q = make([]float64, len(agent.distributions))
+	agent.numExplored = make([]float64, len(agent.distributions))
+	agent.nextStep = rand.Intn(len(agent.distributions))
+	return agent
+}
+
+func ClearAgent(agent Agent) Agent {
+	agent.q = make([]float64, len(agent.distributions))
+	agent.numExplored = make([]float64, len(agent.distributions))
+	agent.nextStep = rand.Intn(len(agent.distributions))
+	agent.totalScore = 0
 
 	return agent
 }
 
 func AgentStep(agent Agent) Agent {
-	var nextStep int
 
-	if ArraySumFloat64(agent.numExplored) > 0 { // do greedy search on step
-		exploration := 2
+	reward := RandomGaussian(agent.distributions[agent.nextStep])
+
+	agent.numExplored[agent.nextStep] += float64(1)
+	agent.totalScore += reward
+	agent.q[agent.nextStep] += (reward - agent.q[agent.nextStep]) / agent.numExplored[agent.nextStep]
+
+	if ArraySumFloat64(agent.numExplored) > math.Inf(-1) { // do greedy search on step
+
 		var expectedQ []float64
 
 		for i := 0; i < len(agent.distributions); i++ {
-			expectedQ = append(expectedQ, agent.q[i]+float64(exploration)*(math.Sqrt(math.Log(math.E)/agent.numExplored[i])))
-
+			expectedQ = append(expectedQ, agent.q[i]+(float64(agent.exploration)*(math.Sqrt((math.Log(math.E)*ArraySumFloat64(agent.numExplored))/agent.numExplored[i]))))
 		}
-		fmt.Println(expectedQ)
-		nextStep = RandomArgmax(expectedQ)
-
-	} else {
-		nextStep = RandomArgmax(agent.q)
+		agent.nextStep = RandomArgmax(expectedQ)
 	}
-
-	reward := RandomGaussian(agent.distributions[nextStep])
-
-	agent.numExplored[nextStep] += float64(1)
-	agent.totalScore += reward
-
-	agent.q[nextStep] = reward - agent.q[nextStep] / agent.numExplored[nextStep]
 
 	return agent
 }
 
 func main() {
 	rand.Seed(time.Now().UnixNano())
-	agent := CreateAgent(10)
-	fmt.Printf("Number of distributions: %v\n", len(agent.distributions))
-	for i := 0; i < 100000; i++ {
-		fmt.Println(i)
-		agent = AgentStep(agent)
+
+	distributions := 50
+	iterations := 600
+
+	agent := CreateAgent(distributions)
+
+	var explorationArray []float64
+	for e:=1;e<200;e++ {
+		explorationArray = append(explorationArray, (0.0 + 0.01 * float64(e)))
 	}
-	fmt.Println(agent.totalScore)
-	fmt.Println(agent.totalScore / ArraySumFloat64(agent.numExplored))
+
+	for _, exploration := range explorationArray {
+		var averages []float64
+		var xAxis []float64
+		agent.exploration = exploration
+		for i := 0; i < iterations; i++ {
+			agent = AgentStep(agent)
+			averages = append(averages, agent.totalScore/ArraySumFloat64(agent.numExplored))
+			xAxis = append(xAxis, float64(i))
+		}
+		graph := chart.Chart{
+			Title: fmt.Sprintf("Exploration: %f", agent.exploration),
+			YAxis: chart.YAxis{
+				Name: "Random Values",
+				Range: &chart.ContinuousRange{
+					Min: -2,
+					Max: 5,
+				},
+			},
+			Series: []chart.Series{
+				chart.ContinuousSeries{
+					XValues: xAxis,
+					YValues: averages,
+				},
+			},
+		}
+
+
+		filename := fmt.Sprintf("imgs/explr%f.png", agent.exploration)
+		f, _ := os.Create(filename)
+		defer f.Close()
+		err := graph.Render(chart.PNG, f)
+		if err != nil {
+			fmt.Println(err)
+		}
+
+		agent = ClearAgent(agent)
+	}
+
 }

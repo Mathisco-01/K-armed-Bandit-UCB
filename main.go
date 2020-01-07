@@ -115,7 +115,7 @@ func main() {
 	rand.Seed(time.Now().UnixNano())
 
 	distributions := 50
-	iterations := 600
+	iterations := 200
 
 	agent := CreateAgent(distributions)
 
@@ -136,11 +136,14 @@ func main() {
 		graph := chart.Chart{
 			Title: fmt.Sprintf("Exploration: %f", agent.exploration),
 			YAxis: chart.YAxis{
-				Name: "Random Values",
+				Name: "Cumulative average reward",
 				Range: &chart.ContinuousRange{
 					Min: -2,
 					Max: 5,
 				},
+			},
+			XAxis: chart.XAxis{
+				Name: "Iteration",
 			},
 			Series: []chart.Series{
 				chart.ContinuousSeries{

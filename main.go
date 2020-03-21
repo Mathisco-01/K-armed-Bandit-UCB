@@ -31,7 +31,11 @@ func CreateGaussianDistribution(mu, sigma float64) GaussianDistribution {
 
 // Returns random number from GaussianDistribution object
 func RandomGaussian(distr GaussianDistribution) float64 {
-	return distr.mu + distr.sigma*RandomFloat64Range(-1, 1)
+	u1 := RandomFloat64Range(0, 1)
+	u2 := RandomFloat64Range(0, 1)
+
+	z1 := (math.Sqrt(-2*math.Log(u1)) * math.Cos(2*math.Pi*u2))
+	return z1 * distr.sigma * distr.mu
 }
 
 // Returns Random float64 within a range of (min, max)
@@ -121,7 +125,7 @@ func main() {
 
 	var explorationArray []float64
 	for e:=1;e<200;e++ {
-		explorationArray = append(explorationArray, (0.0 + 0.01 * float64(e)))
+		explorationArray = append(explorationArray, (0.0 + 0.001 * float64(e)))
 	}
 
 	for _, exploration := range explorationArray {
